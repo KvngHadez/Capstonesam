@@ -61,11 +61,11 @@ def lambda_handler(event, context):
 def post(event_body):
 
     try:
-        if (not (event_body['distance'] == None)) and (not (event_body['time'] == None)) and (not (event_body['speed'] == None)):
+        if (not (event_body['distance'] == None)) and (not (event_body['time'] == None)) and (not (event_body['direction'] == None)):
             return {
                     "statusCode": 200,
                     'headers': HEADERS,
-                    "body": json.dumps({"distance": event_body['distance'], "time":event_body['time'], "speed":event_body['speed']}, indent=2),
+                    "body": json.dumps({"distance": event_body['distance'], "time":event_body['time'], "direction":event_body['direction']}, indent=2),
             }
         else:
              return handle_exception(405, {"message": "Your missing an input"})
