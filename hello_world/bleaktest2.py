@@ -115,7 +115,7 @@ class Connection:
             uuids = device.metadata["uuids"]
             print(uuids)
             print(manudata)
-            if 13 in manudata :
+            if "Polar HR Sensor" == device.name :
                 break
         
         self.connected_device = device
@@ -184,8 +184,8 @@ async def main():
 #############
 # App Main
 #############
-read_characteristic = "00001143-0000-1000-8000-00805f9b34fb"
-write_characteristic = "0000FFF3-0000-1000-8000-00805f9b34fb"
+read_characteristic = "00002A38-0000-1000-8000-00805f9b34fb"
+write_characteristic = "00002A37-0000-1000-8000-00805f9b34fb"
 
 if __name__ == "__main__":
 

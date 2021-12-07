@@ -6,6 +6,6 @@ codeuri = "C:\\Users\\Hayde\\Box Sync\\4th Year\\Capstone\\sam-app\\hello_world"
 runtime = "python3.9"
 source_md5 = ""
 packagetype = "Zip"
-functions = ["HelloWorldFunction"]
+functions = ["HelloWorldFunction", "MotorFunction"]
 
 [layer_build_definitions]
