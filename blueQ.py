@@ -1,16 +1,13 @@
-from flask import Flask, request
-from flask_restful import Api, Resource
+from quart import Quart, render_template, websocket, request
 from aioconsole import ainput
 from bleak import BleakClient, discover
 import asyncio
 from datetime import datetime
 from typing import Callable, Any
-from flask_apscheduler import APScheduler
-import subprocess
-
 
 selected_device = []
 
+loop = asyncio.get_event_loop()
 
 in_dis = ""
 in_time = ""
@@ -19,9 +16,7 @@ in_dir = ""
 read_characteristic = "00001143-0000-1000-8000-00805f9b34fb"
 write_characteristic = "0000FFF3-0000-1000-8000-00805f9b34fb"
 
-app = Flask(__name__)
-api = Api(app)
-
+app = Quart(__name__)
 class Connection:
 
     client: BleakClient = None
@@ -48,10 +43,10 @@ class Connection:
         self.rx_timestamps = []
         self.rx_delays = []
 
-    def on_disconnect(self, client: BleakClient, future: asyncio.Future):
-        self.connected = False
-        # Put code here to handle what happens on disconnet.
-        print(f"Disconnected from {self.connected_device.name}!")
+        def on_disconnect(self, client: BleakClient, future: asyncio.Future):
+            self.connected = False
+            # Put code here to handle what happens on disconnet.
+            print(f"Disconnected from {self.connected_device.name}!")
 
     async def cleanup(self):
         if self.client:
@@ -162,31 +157,28 @@ async def main():
         # YOUR APP CODE WOULD GO HERE.
         await asyncio.sleep(5)
 
+@app.route("/api")
+async def json():
+    return {"hello": "world"}
 
-class MotorControl(Resource):
-    def post(self):
-        in_dis = request.values.get("distance")
-        in_time = request.values.get("time")
-        in_dir = request.values.get("direction")
-        cmd = "python bleaktest2.py " + in_dis + " " + in_time + " " + in_dir
-        print(cmd)
-        subprocess.call((cmd), shell=True)
-        return {"distance" : in_dis, "time" : in_time, "direction" : in_dir}
-
-loop = asyncio.get_event_loop()
-
-def shutdown_server():
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
-    
-@app.get('/shutdown')
-def shutdown():
-    shutdown_server()
-    return 'Server shutting down...'
+@app.route('/Motor', methods = ["POST"])
+async def MotorControl():
+    loop = asyncio.get_event_loop()
+    connection = Connection(
+        loop, read_characteristic, write_characteristic)
+    try:
+        asyncio.ensure_future(connection.manager())
+        asyncio.ensure_future(user_console_manager(connection))
+        asyncio.ensure_future(main())
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print()
+        print("User stopped program.")
+    finally:
+        print("Disconnecting...")
+        loop.run_until_complete(connection.cleanup())
+    return {"distance" : in_dis, "time" : in_time, "direction" : in_dir}
         
-api.add_resource(MotorControl, "/Motor")
 
 if __name__ == "__main__":
-    app.run()
+    app.run(threaded = True)

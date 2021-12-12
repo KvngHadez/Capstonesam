@@ -1,29 +1,45 @@
-from flask import Flask, request
-from flask_restful import Api, Resource
-from aioconsole import ainput
-from bleak import BleakClient, discover
+from typing import Optional
 import asyncio
+import platform
 from datetime import datetime
 from typing import Callable, Any
-from flask_apscheduler import APScheduler
-import subprocess
 
+from aioconsole import ainput
+from bleak import BleakClient, discover
 
-selected_device = []
-
-
-in_dis = ""
-in_time = ""
-in_dir = ""
+from fastapi import FastAPI
+from pydantic import BaseModel
 
 read_characteristic = "00001143-0000-1000-8000-00805f9b34fb"
 write_characteristic = "0000FFF3-0000-1000-8000-00805f9b34fb"
 
-app = Flask(__name__)
-api = Api(app)
+
+app = FastAPI()
+
+class Item(BaseModel):
+    distance: str
+    time: str
+    direction: str
+
+@app.post("/items/")
+async def create_item(item: Item):
+    global in_dis
+    global in_time
+    global in_dir
+    global loop
+    loop = asyncio.get_event_loop()
+    in_dis = item.distance
+    in_time = item.time
+    in_dir = item.direction
+    connection = Connection(
+        loop, read_characteristic, write_characteristic)
+    asyncio.ensure_future(connection.manager())
+    asyncio.ensure_future(user_console_manager(connection))
+    asyncio.ensure_future(connection.cleanup())
+    return in_dis + in_time + in_dir
 
 class Connection:
-
+    
     client: BleakClient = None
     
     def __init__(
@@ -91,7 +107,7 @@ class Connection:
             print(e)
 
     async def select_device(self):
-        print("Bluetooh LE hardware warming up...")
+        print("Bluetooth LE hardware warming up...")
         await asyncio.sleep(2.0, loop=loop) # Wait for BLE to initialize.
         devices = await discover()
 
@@ -104,7 +120,7 @@ class Connection:
             uuids = device.metadata["uuids"]
             print(uuids)
             print(manudata)
-            if "Polar HR Sensor" == device.name :
+            if 13 in manudata :
                 break
         
         self.connected_device = device
@@ -145,48 +161,26 @@ class Connection:
             self.data_dump_handler(self.rx_data, self.rx_timestamps, self.rx_delays)
             self.clear_lists()
 
+
+#############
+# Loops
+#############
 async def user_console_manager(connection: Connection):
-    while True:
+    i = 0
+    while i == 0:
         if connection.client and connection.connected:
-            #input_str = await ainput("Enter string: ")
-            #bytes_to_send = hex(int(event_body['distance'], 16))
-            #print(bytes_to_send)
-            #finalbytes = bytearray(map(ord, bytes_to_send))
-            input = in_dis + in_time + "0" + in_dir
-            await connection.client.write_gatt_char(write_characteristic, bytes.fromhex(input))
+            input_str = in_dis + in_time + "0" + in_dir
+            print(input_str)
+
+            await connection.client.write_gatt_char(write_characteristic, bytes.fromhex(input_str))
+            print(f"Sent: {input_str}")
+            i = i + 1
         else:
             await asyncio.sleep(2.0, loop=loop)
 
-async def main():
-    while True:
-        # YOUR APP CODE WOULD GO HERE.
-        await asyncio.sleep(5)
 
+#async def main():
+#    while True:
+#        # YOUR APP CODE WOULD GO HERE.
+#        await asyncio.sleep(5)
 
-class MotorControl(Resource):
-    def post(self):
-        in_dis = request.values.get("distance")
-        in_time = request.values.get("time")
-        in_dir = request.values.get("direction")
-        cmd = "python bleaktest2.py " + in_dis + " " + in_time + " " + in_dir
-        print(cmd)
-        subprocess.call((cmd), shell=True)
-        return {"distance" : in_dis, "time" : in_time, "direction" : in_dir}
-
-loop = asyncio.get_event_loop()
-
-def shutdown_server():
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
-    
-@app.get('/shutdown')
-def shutdown():
-    shutdown_server()
-    return 'Server shutting down...'
-        
-api.add_resource(MotorControl, "/Motor")
-
-if __name__ == "__main__":
-    app.run()

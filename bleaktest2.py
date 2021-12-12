@@ -1,29 +1,44 @@
-from flask import Flask, request
-from flask_restful import Api, Resource
-from aioconsole import ainput
-from bleak import BleakClient, discover
+import os, sys
 import asyncio
+import platform
 from datetime import datetime
 from typing import Callable, Any
-from flask_apscheduler import APScheduler
-import subprocess
 
+from aioconsole import ainput
+from bleak import BleakClient, discover
+
+print(sys.argv[1:])
+direction = sys.argv.pop()
+time = sys.argv.pop()
+distance = sys.argv.pop()
+
+output_file = f"C:/Users/Hayde/Desktop/microphone.csv"
 
 selected_device = []
 
+# class DataToFile:
 
-in_dis = ""
-in_time = ""
-in_dir = ""
+#     column_names = ["time", "delay", "data_value"]
 
-read_characteristic = "00001143-0000-1000-8000-00805f9b34fb"
-write_characteristic = "0000FFF3-0000-1000-8000-00805f9b34fb"
+#     def __init__(self, write_path):
+#         self.path = write_path
 
-app = Flask(__name__)
-api = Api(app)
+#     def write_to_csv(self, times: [int], delays: [datetime], data_values: [Any]):
+
+#         if len(set([len(times), len(delays), len(data_values)])) > 1:
+#             raise Exception("Not all data lists are the same length.")
+
+#         with open(self.path, "a+") as f:
+#             if os.stat(self.path).st_size == 0:
+#                 print("Created file.")
+#                 f.write(",".join([str(name) for name in self.column_names]) + ",\n")
+#             else:
+#                 for i in range(len(data_values)):
+#                     f.write(f"{times[i]},{delays[i]},{data_values[i]},\n")
+
 
 class Connection:
-
+    
     client: BleakClient = None
     
     def __init__(
@@ -104,7 +119,7 @@ class Connection:
             uuids = device.metadata["uuids"]
             print(uuids)
             print(manudata)
-            if "Polar HR Sensor" == device.name :
+            if 13 in manudata :
                 break
         
         self.connected_device = device
@@ -145,17 +160,25 @@ class Connection:
             self.data_dump_handler(self.rx_data, self.rx_timestamps, self.rx_delays)
             self.clear_lists()
 
+
+#############
+# Loops
+#############
 async def user_console_manager(connection: Connection):
-    while True:
+    i = 0
+    while i == 0:
         if connection.client and connection.connected:
-            #input_str = await ainput("Enter string: ")
-            #bytes_to_send = hex(int(event_body['distance'], 16))
-            #print(bytes_to_send)
-            #finalbytes = bytearray(map(ord, bytes_to_send))
-            input = in_dis + in_time + "0" + in_dir
-            await connection.client.write_gatt_char(write_characteristic, bytes.fromhex(input))
+            input_str = distance + time + "0" + direction
+            bytes_to_send = hex(int(input_str, 16))
+            print(bytes_to_send)
+            finalbytes = bytearray(map(ord, bytes_to_send))
+
+            await connection.client.write_gatt_char(write_characteristic, bytes.fromhex(input_str))
+            print(f"Sent: {input_str}")
+            i = i + 1
         else:
             await asyncio.sleep(2.0, loop=loop)
+
 
 async def main():
     while True:
@@ -163,30 +186,30 @@ async def main():
         await asyncio.sleep(5)
 
 
-class MotorControl(Resource):
-    def post(self):
-        in_dis = request.values.get("distance")
-        in_time = request.values.get("time")
-        in_dir = request.values.get("direction")
-        cmd = "python bleaktest2.py " + in_dis + " " + in_time + " " + in_dir
-        print(cmd)
-        subprocess.call((cmd), shell=True)
-        return {"distance" : in_dis, "time" : in_time, "direction" : in_dir}
 
-loop = asyncio.get_event_loop()
-
-def shutdown_server():
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
-    
-@app.get('/shutdown')
-def shutdown():
-    shutdown_server()
-    return 'Server shutting down...'
-        
-api.add_resource(MotorControl, "/Motor")
+#############
+# App Main
+#############
+read_characteristic = "00001143-0000-1000-8000-00805f9b34fb"
+write_characteristic = "0000FFF3-0000-1000-8000-00805f9b34fb"
 
 if __name__ == "__main__":
-    app.run()
+
+    # Create the event loop.
+    loop = asyncio.get_event_loop()
+
+    #data_to_file = DataToFile(output_file)
+    connection = Connection(
+        loop, read_characteristic, write_characteristic)
+    print(connection.write_characteristic)
+    try:
+        asyncio.ensure_future(connection.manager())
+        asyncio.ensure_future(user_console_manager(connection))
+        asyncio.ensure_future(main())
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print()
+        print("User stopped program.")
+    finally:
+        print("Disconnecting...")
+        loop.run_until_complete(connection.cleanup())
